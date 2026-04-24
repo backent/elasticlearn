@@ -1,0 +1,26 @@
+# Rust
+/backend/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Node
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.vite/
+
+# Local data
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+/data/
+
+# Env
+.env
+.env.local
+
+# Editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
