@@ -8,9 +8,10 @@ use axum::{
 };
 use chrono::{Duration, Utc};
 use serde::Serialize;
+use serde_json::json;
 use ulid::Ulid;
 
-use crate::{auth, db, error::AppResult, state::AppState};
+use crate::{analytics, auth, db, error::AppResult, state::AppState};
 
 #[derive(Serialize)]
 pub struct SessionView {
@@ -26,6 +27,15 @@ pub async fn create(State(state): State<AppState>) -> AppResult<Response> {
     let expires_at = Utc::now() + Duration::minutes(state.cfg.session_ttl_min);
 
     db::insert_session(&state.pool, &sid, expires_at).await?;
+
+    analytics::track(
+        &state.pool,
+        Some(&sid),
+        analytics::KIND_SESSION_STARTED,
+        analytics::STATUS_OK,
+        json!({ "ttl_min": state.cfg.session_ttl_min }),
+    )
+    .await;
 
     let view = SessionView {
         session_id: sid.clone(),
@@ -57,8 +67,19 @@ pub async fn end(
     State(state): State<AppState>,
     auth::AuthSession(s): auth::AuthSession,
 ) -> AppResult<Response> {
+    let duration_sec = (Utc::now() - s.created_at).num_seconds().max(0);
+
     db::delete_session(&state.pool, &s.sid).await?;
     state.es.delete_session_indices(&s.sid).await.ok();
+
+    analytics::track(
+        &state.pool,
+        Some(&s.sid),
+        analytics::KIND_SESSION_ENDED,
+        analytics::STATUS_OK,
+        json!({ "reason": "manual", "duration_sec": duration_sec }),
+    )
+    .await;
 
     let mut resp = StatusCode::NO_CONTENT.into_response();
     resp.headers_mut()

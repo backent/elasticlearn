@@ -18,6 +18,8 @@ of the decisions below trade capability for blast-radius containment.
 | 9 | Path-traversal / wildcard via index name | `prefixed_index` limits input to `[a-z0-9_-]{1,64}` and rejects leading `_`. `assert_owned` separately bans `*,/?"`/whitespace in the full name. | `backend/src/es.rs` |
 | 10 | Denial of service via rapid queries | Rate limit planned via `tower-governor` (scope: per-session). Not live in MVP — document and ship before public launch. | `TODO` `main.rs` |
 | 11 | CSV injection into spreadsheets (if someone re-exports) | Out of scope — we never export, and all output is rendered as JSON. | n/a |
+| 12 | Admin stats endpoint enumeration | `/api/admin/stats` returns 404 (not 401) when `ADMIN_TOKEN` is unset; when set, a wrong token returns 401 with no token hint in the response. | `routes/admin.rs::stats` |
+| 13 | Analytics leaks user data | `analytics::track` only stores session id + kind + status + structural meta (index name, latency, doc count, error string). Query bodies and document contents are never passed in. | `backend/src/analytics.rs`, `routes/*.rs` call sites |
 
 ## Explicitly not protected against
 

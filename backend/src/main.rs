@@ -13,6 +13,7 @@ use tower_http::{
     compression::CompressionLayer,
 };
 
+mod analytics;
 mod auth;
 mod cleanup;
 mod config;
@@ -55,6 +56,7 @@ async fn main() -> anyhow::Result<()> {
         .allow_headers([
             axum::http::header::CONTENT_TYPE,
             axum::http::header::ACCEPT,
+            axum::http::header::AUTHORIZATION,
         ]);
 
     let app = Router::new()
@@ -66,6 +68,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/query", post(routes::query::search))
         .route("/api/indices", get(routes::query::list_indices))
         .route("/api/mapping/:name", get(routes::query::mapping))
+        .route("/api/admin/stats", get(routes::admin::stats))
         .layer(RequestBodyLimitLayer::new(cfg.max_upload_bytes + 1024))
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())

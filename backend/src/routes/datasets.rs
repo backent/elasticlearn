@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::{auth::AuthSession, error::{AppError, AppResult}, es, state::AppState};
+use crate::{analytics, auth::AuthSession, error::{AppError, AppResult}, es, state::AppState};
 
 #[derive(Deserialize)]
 pub struct UploadParams {
@@ -32,7 +32,44 @@ pub async fn upload(
     Query(params): Query<UploadParams>,
     mut multipart: Multipart,
 ) -> AppResult<Json<UploadResult>> {
-    let full_index = es::prefixed_index(&s.sid, &params.index)?;
+    let outcome = do_upload(&state, &s.sid, &params, &mut multipart).await;
+
+    let (status, meta) = match &outcome {
+        Ok(r) => (
+            analytics::STATUS_OK,
+            serde_json::json!({
+                "format": params.format.as_deref().unwrap_or("ndjson"),
+                "doc_count": r.doc_count,
+                "index_errors": r.errors,
+            }),
+        ),
+        Err(e) => (
+            analytics::STATUS_ERROR,
+            serde_json::json!({
+                "format": params.format.as_deref().unwrap_or("ndjson"),
+                "error": e.to_string(),
+            }),
+        ),
+    };
+    analytics::track(
+        &state.pool,
+        Some(&s.sid),
+        analytics::KIND_DATASET_UPLOADED,
+        status,
+        meta,
+    )
+    .await;
+
+    outcome.map(Json)
+}
+
+async fn do_upload(
+    state: &AppState,
+    sid: &str,
+    params: &UploadParams,
+    multipart: &mut Multipart,
+) -> AppResult<UploadResult> {
+    let full_index = es::prefixed_index(sid, &params.index)?;
     state.es.create_index(&full_index).await?;
 
     let format = params
@@ -93,11 +130,11 @@ pub async fn upload(
         }
     }
 
-    Ok(Json(UploadResult {
-        index: params.index,
+    Ok(UploadResult {
+        index: params.index.clone(),
         doc_count: total_docs,
         errors,
-    }))
+    })
 }
 
 fn parse_ndjson(text: &str) -> AppResult<Vec<Value>> {

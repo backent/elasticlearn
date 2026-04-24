@@ -133,3 +133,40 @@ doesn't exist.
 ## `GET /api/health` — liveness probe
 
 Returns plain text `ok`. No auth, no state. Use for container health checks.
+
+---
+
+## `GET /api/admin/stats` — usage analytics  *(admin token)*
+
+Aggregates the `events` table. Requires `Authorization: Bearer <ADMIN_TOKEN>`.
+If `ADMIN_TOKEN` is unset, the endpoint returns 404 (not 401) so it can't be
+enumerated.
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:8080/api/admin/stats
+```
+
+Response shape:
+
+```json
+{
+  "generated_at": "2026-04-24T10:00:00Z",
+  "totals": {
+    "session_started": 412,
+    "session_ended": 389,
+    "dataset_uploaded": 201,
+    "query_executed": 3104
+  },
+  "last_24h": { "session_started": 58, "session_ended": 51, "dataset_uploaded": 30, "query_executed": 412 },
+  "uploads": { "total": 201, "errors": 4, "total_docs_indexed": 412093 },
+  "queries": { "total": 3104, "errors": 18, "avg_latency_ms": 23.4, "p95_latency_ms": 118 },
+  "sessions": { "avg_duration_sec": 1840.2, "expired": 321, "manual_end": 68 },
+  "events_per_day": [
+    { "day": "2026-04-23", "session_started": 57, "dataset_uploaded": 28, "query_executed": 402 }
+  ]
+}
+```
+
+See [`docs/operations.md`](./operations.md#analytics) for raw SQL recipes if
+you want to slice the data differently.

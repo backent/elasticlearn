@@ -14,6 +14,7 @@ pub struct Config {
     pub max_upload_bytes: usize,
     pub max_docs_per_index: usize,
     pub frontend_origin: String,
+    pub admin_token: Option<String>,
 }
 
 impl Config {
@@ -46,6 +47,7 @@ impl Config {
                 .unwrap_or(100_000),
             frontend_origin: env::var("FRONTEND_ORIGIN")
                 .unwrap_or_else(|_| "http://localhost:5173".into()),
+            admin_token: env::var("ADMIN_TOKEN").ok().filter(|s| !s.is_empty()),
         })
     }
 }

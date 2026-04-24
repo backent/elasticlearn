@@ -8,7 +8,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{auth::AuthSession, error::{AppError, AppResult}, es, state::AppState};
+use std::time::Instant;
+
+use crate::{analytics, auth::AuthSession, error::{AppError, AppResult}, es, state::AppState};
 
 #[derive(Deserialize)]
 pub struct SearchRequest {
@@ -30,13 +32,51 @@ pub async fn search(
     AuthSession(s): AuthSession,
     Json(req): Json<SearchRequest>,
 ) -> AppResult<Json<Value>> {
-    reject_unsafe(&req.body)?;
+    let started = Instant::now();
+    let outcome: AppResult<Value> = async {
+        reject_unsafe(&req.body)?;
+        let full = es::prefixed_index(&s.sid, &req.index)?;
+        es::assert_owned(&s.sid, &full)?;
+        state.es.search(&full, &req.body).await
+    }
+    .await;
 
-    let full = es::prefixed_index(&s.sid, &req.index)?;
-    es::assert_owned(&s.sid, &full)?;
+    let latency_ms = started.elapsed().as_millis() as u64;
+    let (status, meta) = match &outcome {
+        Ok(body) => {
+            let hits = body
+                .get("hits")
+                .and_then(|h| h.get("total"))
+                .and_then(|t| t.get("value"))
+                .and_then(|v| v.as_u64());
+            (
+                analytics::STATUS_OK,
+                serde_json::json!({
+                    "index": req.index,
+                    "latency_ms": latency_ms,
+                    "hits": hits,
+                }),
+            )
+        }
+        Err(e) => (
+            analytics::STATUS_ERROR,
+            serde_json::json!({
+                "index": req.index,
+                "latency_ms": latency_ms,
+                "error": e.to_string(),
+            }),
+        ),
+    };
+    analytics::track(
+        &state.pool,
+        Some(&s.sid),
+        analytics::KIND_QUERY_EXECUTED,
+        status,
+        meta,
+    )
+    .await;
 
-    let body = state.es.search(&full, &req.body).await?;
-    Ok(Json(body))
+    outcome.map(Json)
 }
 
 /// GET /api/indices — list the caller's indices.

@@ -28,6 +28,7 @@ services:
       - DATABASE_URL=sqlite:///data/data.db?mode=rwc
       - BIND_ADDR=0.0.0.0:8080
       - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:5173}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
       - RUST_LOG=info,elasticlearn=debug
     volumes:
       - backend-data:/data

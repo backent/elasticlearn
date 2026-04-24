@@ -49,11 +49,13 @@ elasticlearn/
 │       ├── db.rs            ← SQLite sessions table
 │       ├── es.rs            ← HTTP client + index-prefix helpers
 │       ├── cleanup.rs       ← background task, 30 s interval
+│       ├── analytics.rs     ← track() → events table (usage analytics)
 │       ├── error.rs         ← AppError → JSON response
 │       └── routes/
 │           ├── sessions.rs  ← POST/GET/DELETE /api/sessions…
 │           ├── datasets.rs  ← POST /api/datasets
-│           └── query.rs     ← POST /api/query, GET /api/indices, /mapping
+│           ├── query.rs     ← POST /api/query, GET /api/indices, /mapping
+│           └── admin.rs     ← GET /api/admin/stats (ADMIN_TOKEN gated)
 ├── frontend/
 │   ├── package.json
 │   ├── vite.config.ts       ← proxies /api → :8080
@@ -90,6 +92,11 @@ elasticlearn/
   indices are already gone; the DB row is then removed.
 - **Upload caps are server-enforced**, not trusted from the client:
   `MAX_UPLOAD_BYTES` and `MAX_DOCS_PER_INDEX`.
+- **Analytics writes never fail a user request.** `analytics::track` logs and
+  swallows errors — treat it as fire-and-forget.
+- **Event `meta` must not contain query bodies or document contents.** Only
+  structural data (index name, latency, counts, error strings). See
+  `docs/security.md`.
 
 ## Keeping docs fresh
 

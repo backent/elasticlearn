@@ -37,6 +37,7 @@ static files served by nginx/Caddy.
 | `MAX_UPLOAD_BYTES` | `52428800` | Larger → OOM risk. Smaller → users hit 413. |
 | `MAX_DOCS_PER_INDEX` | `100000` | Governs ES storage per session. |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | If wrong → CORS blocks the SPA. Must match how users load the app. |
+| `ADMIN_TOKEN` | *(unset)* | When set, unlocks `GET /api/admin/stats`. Unset/empty → endpoint 404s. |
 | `RUST_LOG` | `info` | Use `debug` while troubleshooting. `elasticlearn=debug` for app-only. |
 
 ## Production deployment sketch
@@ -66,6 +67,64 @@ Tighten before going public:
   directly; remove the dev Vite container.
 - Enable `tower-governor` rate limit (TODO in `main.rs`).
 - Put `backend-data` on a persistent volume.
+
+## Analytics
+
+Every interesting interaction is recorded as a row in `events`:
+
+| Column | Example | Notes |
+|---|---|---|
+| `ts` | `2026-04-24 09:37:12` | server time |
+| `sid` | `01htgfx…abc` | session id (opaque ULID) |
+| `kind` | `query_executed` | one of: `session_started`, `session_ended`, `dataset_uploaded`, `query_executed` |
+| `status` | `ok` / `error` |  |
+| `meta` | `{"index":"movies","latency_ms":12,"hits":7}` | JSON blob — **never contains query bodies or uploaded documents** |
+
+Quick endpoint for a glanceable view:
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:8080/api/admin/stats | jq
+```
+
+Or slice it yourself:
+
+```bash
+sqlite3 data.db <<'SQL'
+-- sessions started per day, last 14 days
+SELECT date(ts), COUNT(*) FROM events
+ WHERE kind = 'session_started' AND ts >= datetime('now','-14 days')
+ GROUP BY 1 ORDER BY 1;
+
+-- most-hit indices
+SELECT json_extract(meta,'$.index') AS idx, COUNT(*) FROM events
+ WHERE kind = 'query_executed' GROUP BY 1 ORDER BY 2 DESC LIMIT 10;
+
+-- query latency distribution
+SELECT
+  COUNT(*) AS n,
+  AVG(CAST(json_extract(meta,'$.latency_ms') AS INTEGER)) AS avg_ms,
+  MAX(CAST(json_extract(meta,'$.latency_ms') AS INTEGER)) AS max_ms
+ FROM events WHERE kind = 'query_executed' AND status = 'ok';
+
+-- top error messages on upload
+SELECT json_extract(meta,'$.error') AS err, COUNT(*) FROM events
+ WHERE kind = 'dataset_uploaded' AND status = 'error'
+ GROUP BY 1 ORDER BY 2 DESC LIMIT 20;
+SQL
+```
+
+**Retention.** Events are kept indefinitely by default. To cap the table, run
+nightly:
+
+```sql
+DELETE FROM events WHERE ts < datetime('now','-90 days');
+VACUUM;
+```
+
+**Privacy.** The event payload intentionally excludes query bodies and
+document contents, so dumping the table is safe to share internally. Session
+ids are opaque and unlinkable to real users.
 
 ## Backup & restore
 

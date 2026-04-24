@@ -4,7 +4,10 @@
 
 use std::time::Duration;
 
-use crate::{db, state::AppState};
+use chrono::Utc;
+use serde_json::json;
+
+use crate::{analytics, db, state::AppState};
 
 pub fn spawn(state: AppState) {
     tokio::spawn(async move {
@@ -28,13 +31,25 @@ async fn sweep(state: &AppState) -> anyhow::Result<()> {
     tracing::info!(count = expired.len(), "expiring sessions");
 
     for s in expired {
+        let duration_sec = (Utc::now() - s.created_at).num_seconds().max(0);
+
         if let Err(e) = state.es.delete_session_indices(&s.sid).await {
             tracing::warn!(sid = %s.sid, error = %e, "failed to delete ES indices");
             continue;
         }
         if let Err(e) = db::delete_session(&state.pool, &s.sid).await {
             tracing::warn!(sid = %s.sid, error = %e, "failed to delete session row");
+            continue;
         }
+
+        analytics::track(
+            &state.pool,
+            Some(&s.sid),
+            analytics::KIND_SESSION_ENDED,
+            analytics::STATUS_OK,
+            json!({ "reason": "expired", "duration_sec": duration_sec }),
+        )
+        .await;
     }
     Ok(())
 }
