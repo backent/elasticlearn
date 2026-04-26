@@ -2,8 +2,9 @@
 
 ## Local development
 
-**Prereqs:** Docker (for Elasticsearch), Rust 1.85+ (some transitive deps now
-require `edition2024`), Node.js 20+.
+**Prereqs:** Docker (for Elasticsearch), Rust 1.88+ (some transitive deps —
+`time`, `icu_*` — keep raising their MSRV; the Dockerfile pins 1.92 to give
+headroom), Node.js 20+.
 
 ```bash
 git clone <repo> && cd elasticlearn

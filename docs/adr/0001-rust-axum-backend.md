@@ -18,7 +18,7 @@ Options considered:
 
 ## Decision
 
-Use **Rust 1.85+** with **Axum 0.7** on Tokio. `reqwest` for the ES HTTP
+Use **Rust 1.88+** with **Axum 0.7** on Tokio. `reqwest` for the ES HTTP
 client (a thin proxy doesn't need a typed ES client and we *want* to show
 learners the raw JSON). `sqlx` for SQLite. `jsonwebtoken` for session tokens.
 
